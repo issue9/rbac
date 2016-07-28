@@ -27,6 +27,7 @@ type roleResouce struct {
 	resources map[string]Resourcer // 当前用户的可访问资源列表
 }
 
+// New 新建 RBAC
 func New() *RBAC {
 	return &RBAC{
 		roles:     make(map[string]roleResouce, 100),
@@ -68,7 +69,10 @@ func (r *RBAC) RemoveResource(resource Resourcer) {
 	r.mu.Unlock()
 }
 
-// Assgin 赋予 role 访问 resource 的权限
+// Assgin 赋予 role 访问 resource 的权限。
+//
+// 即使其父类已有权限，也会再次给 role 直接赋予访问 resource 的权限。
+// 若 role 已经拥有直接访问 resource 的权限，则不执行任何操作。
 func (r *RBAC) Assgin(role Roler, resource Resourcer) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -109,6 +113,13 @@ func (r *RBAC) Revoke(role Roler, resource Resourcer) error {
 
 	r.mu.Unlock()
 	return nil
+}
+
+// RevokeAll 取消某一角色的所有的权限
+func (r *RBAC) RevokeAll(role Roler) {
+	r.mu.Lock()
+	delete(r.roles, role.UniqueID())
+	r.mu.Unlock()
 }
 
 // IsAllow 查询 role 是否拥有访问 resource 的权限

@@ -8,7 +8,7 @@ import "sync"
 
 type role struct {
 	mu        sync.RWMutex
-	parents   []string        // 角色的父类，部分权限可能从其父类继承
+	parents   []*role         // 角色的父类，部分权限可能从其父类继承
 	resources map[string]bool // 角色的可访问资源列表，保存的是 RBAC.resources 的索引
 }
 
@@ -18,13 +18,13 @@ func newRole() *role {
 	}
 }
 
-func (r *role) setParents(parents []string) {
+func (r *role) setParents(parents []*role) {
 	r.mu.Lock()
 	r.parents = parents
 	r.mu.Unlock()
 }
 
-func (r *role) addParents(parents []string) {
+func (r *role) addParents(parents []*role) {
 	r.mu.Lock()
 	if len(r.parents) == 0 {
 		r.parents = parents
@@ -50,7 +50,17 @@ func (r *role) revoke(resource string) {
 func (r *role) isAllow(resource string) bool {
 	r.mu.RLock()
 
-	_, found := r.resources[resource]
+	if _, found := r.resources[resource]; found {
+		r.mu.RUnlock()
+		return true
+	}
+
+	for _, parent := range r.parents {
+		if parent.isAllow(resource) {
+			r.mu.RUnlock()
+			return true
+		}
+	}
 	r.mu.RUnlock()
-	return found
+	return false
 }

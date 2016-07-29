@@ -155,13 +155,14 @@ func (r *RBAC) RevokeAll(roleID string) {
 
 // IsAllow 查询 roleID 是否拥有访问 resourceID 的权限
 //
-// 若角色不存在，也返回 false。
+// 若角色或资源不存在，也返回 false。
 func (r *RBAC) IsAllow(roleID, resourceID string) bool {
 	r.mu.RLock()
-	defer r.mu.RUnlock()
-
 	elem, found := r.roles[roleID]
-	if !found {
+	_, resFound := r.resources[resourceID]
+	r.mu.RUnlock()
+
+	if !found || !resFound {
 		return false
 	}
 

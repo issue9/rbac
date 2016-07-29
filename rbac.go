@@ -122,6 +122,14 @@ func (r *RBAC) RevokeAll(role Roler) {
 	r.mu.Unlock()
 }
 
+// 指定角色是否存在于 RBAC
+func (r *RBAC) HasRole(role Roler) bool {
+	r.mu.RLock()
+	_, found := r.roles[role.UniqueID()]
+	r.mu.RUnlock()
+	return found
+}
+
 // IsAllow 查询 role 是否拥有访问 resource 的权限
 func (r *RBAC) IsAllow(role Roler, resource Resourcer) bool {
 	r.mu.RLock()

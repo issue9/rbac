@@ -17,12 +17,12 @@ var (
 
 type RBAC struct {
 	mu        sync.RWMutex
-	roles     map[string]roleResouce
+	roles     map[string]roleResource
 	resources map[string]Resourcer // 所有已注册资源列表
 }
 
 // 角色与资源的关联
-type roleResouce struct {
+type roleResource struct {
 	role      Roler
 	resources map[string]Resourcer // 当前用户的可访问资源列表
 }
@@ -30,7 +30,7 @@ type roleResouce struct {
 // New 新建 RBAC
 func New() *RBAC {
 	return &RBAC{
-		roles:     make(map[string]roleResouce, 100),
+		roles:     make(map[string]roleResource, 100),
 		resources: make(map[string]Resourcer, 100),
 	}
 }
@@ -85,7 +85,7 @@ func (r *RBAC) Assgin(role Roler, resource Resourcer) error {
 	elem, found := r.roles[role.UniqueID()]
 
 	if !found { // 未初始化该角色的相关信息
-		r.roles[role.UniqueID()] = roleResouce{
+		r.roles[role.UniqueID()] = roleResource{
 			role:      role,
 			resources: map[string]Resourcer{resource.UniqueID(): resource},
 		}

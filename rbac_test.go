@@ -70,6 +70,6 @@ func TestRBAC(t *testing.T) {
 	a.NotError(r.Assgin("usr1", "res2"))
 	a.True(r.IsAllow("usr1", "res2"))
 
-	a.NotError(r.SetParent("usr1", "g1"))
+	a.NotError(r.SetParents("usr1", "g1"))
 	a.True(r.IsAllow("usr1", "res1")) // 通过 g1 间接获得权限
 }

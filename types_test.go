@@ -13,8 +13,13 @@ type testGroup struct {
 func (r *testGroup) UniqueID() string {
 	return "group-" + r.id
 }
+
 func (r *testGroup) Parents() []Roler {
 	return nil
+}
+
+func (r *testGroup) IsAllowHook(resource Resourcer) int {
+	return Continue
 }
 
 ///////////////// user
@@ -27,8 +32,13 @@ type testUser struct {
 func (r *testUser) UniqueID() string {
 	return "user-" + r.id
 }
+
 func (r *testUser) Parents() []Roler {
 	return []Roler{r.parent}
+}
+
+func (r *testUser) IsAllowHook(resource Resourcer) int {
+	return Continue
 }
 
 /////////////// resource

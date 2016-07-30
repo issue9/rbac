@@ -10,7 +10,7 @@ type testGroup struct {
 	id string
 }
 
-func (r *testGroup) UniqueID() string {
+func (r *testGroup) RoleID() string {
 	return "group-" + r.id
 }
 
@@ -29,7 +29,7 @@ type testUser struct {
 	parent Roler
 }
 
-func (r *testUser) UniqueID() string {
+func (r *testUser) RoleID() string {
 	return "user-" + r.id
 }
 
@@ -47,6 +47,6 @@ type testResource struct {
 	id string
 }
 
-func (r *testResource) UniqueID() string {
+func (r *testResource) ResourceID() string {
 	return "resource-" + r.id
 }

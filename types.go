@@ -14,8 +14,8 @@ const (
 
 // 角色接口
 type Roler interface {
-	// 角色的唯一 ID，不能触发 panic，否则结束是未知的。
-	UniqueID() string
+	// 角色的唯一 ID，不能触发 panic，否则结果是未知的。
+	RoleID() string
 
 	// 当前角色的所直接父类
 	Parents() []Roler
@@ -27,8 +27,8 @@ type Roler interface {
 
 // 资源接口
 type Resourcer interface {
-	// 资源的唯一 ID，不能触发 panic，否则结束是未知的。
-	UniqueID() string
+	// 资源的唯一 ID，不能触发 panic，否则结果是未知的。
+	ResourceID() string
 }
 
 // 角色与资源的关联
@@ -38,10 +38,17 @@ type roleResource struct {
 	resources map[string]Resourcer // 当前用户的可访问资源列表
 }
 
+func newRoleResource(role Roler) *roleResource {
+	return &roleResource{
+		role:      role,
+		resources: make(map[string]Resourcer, 10),
+	}
+}
+
 // 赋予当前角色访问 resource 的权限。
 func (r *roleResource) assgin(resource Resourcer) {
 	r.Lock()
-	r.resources[resource.UniqueID()] = resource
+	r.resources[resource.ResourceID()] = resource
 	r.Unlock()
 }
 
@@ -50,6 +57,6 @@ func (r *roleResource) assgin(resource Resourcer) {
 // NOTE: 依然可以从其父类继承该权限。
 func (r *roleResource) revoke(resource Resourcer) {
 	r.Lock()
-	delete(r.resources, resource.UniqueID())
+	delete(r.resources, resource.ResourceID())
 	r.Unlock()
 }

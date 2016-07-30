@@ -33,12 +33,12 @@ func New() *RBAC {
 func (r *RBAC) AddResource(resource Resourcer) error {
 	r.mu.Lock()
 
-	if _, found := r.resources[resource.UniqueID()]; found {
+	if _, found := r.resources[resource.ResourceID()]; found {
 		r.mu.Unlock()
 		return ErrResourceExists
 	}
 
-	r.resources[resource.UniqueID()] = resource
+	r.resources[resource.ResourceID()] = resource
 
 	r.mu.Unlock()
 	return nil
@@ -48,7 +48,7 @@ func (r *RBAC) AddResource(resource Resourcer) error {
 func (r *RBAC) RemoveResource(resource Resourcer) {
 	// 删除注册的资源信息
 	r.mu.Lock()
-	delete(r.resources, resource.UniqueID())
+	delete(r.resources, resource.ResourceID())
 	r.mu.Unlock()
 
 	// 删除角色相关联的资源信息
@@ -65,20 +65,17 @@ func (r *RBAC) RemoveResource(resource Resourcer) {
 // 若 role 已经拥有直接访问 resource 的权限，则不执行任何操作。
 func (r *RBAC) Assgin(role Roler, resource Resourcer) error {
 	r.mu.Lock()
-	_, found := r.resources[resource.UniqueID()]
+	_, found := r.resources[resource.ResourceID()]
 
 	if !found {
 		r.mu.Unlock()
 		return ErrResourceNotExists
 	}
 
-	elem, found := r.roles[role.UniqueID()]
+	elem, found := r.roles[role.RoleID()]
 	if !found { // 未初始化该角色的相关信息
-		elem = &roleResource{
-			role:      role,
-			resources: make(map[string]Resourcer, 10),
-		}
-		r.roles[role.UniqueID()] = elem
+		elem = newRoleResource(role)
+		r.roles[role.RoleID()] = elem
 	}
 	r.mu.Unlock()
 
@@ -91,7 +88,7 @@ func (r *RBAC) Assgin(role Roler, resource Resourcer) error {
 // 则 role 依然可以访问 resource。
 func (r *RBAC) Revoke(role Roler, resource Resourcer) error {
 	r.mu.RLock()
-	elem, found := r.roles[role.UniqueID()]
+	elem, found := r.roles[role.RoleID()]
 	r.mu.RUnlock()
 
 	if !found {
@@ -105,14 +102,14 @@ func (r *RBAC) Revoke(role Roler, resource Resourcer) error {
 // RevokeAll 取消某一角色的所有的权限
 func (r *RBAC) RevokeAll(role Roler) {
 	r.mu.Lock()
-	delete(r.roles, role.UniqueID())
+	delete(r.roles, role.RoleID())
 	r.mu.Unlock()
 }
 
 // 指定角色是否存在于 RBAC
 func (r *RBAC) HasRole(role Roler) bool {
 	r.mu.RLock()
-	_, found := r.roles[role.UniqueID()]
+	_, found := r.roles[role.RoleID()]
 	r.mu.RUnlock()
 	return found
 }
@@ -127,14 +124,14 @@ func (r *RBAC) IsAllow(role Roler, resource Resourcer) bool {
 	}
 
 	r.mu.RLock()
-	elem, found := r.roles[role.UniqueID()]
+	elem, found := r.roles[role.RoleID()]
 	r.mu.RUnlock()
 	if !found {
 		return false
 	}
 
 	elem.RLock()
-	_, found = elem.resources[resource.UniqueID()]
+	_, found = elem.resources[resource.ResourceID()]
 	elem.RUnlock()
 	if found {
 		return true

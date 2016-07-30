@@ -132,6 +132,13 @@ func (r *RBAC) HasRole(role Roler) bool {
 
 // IsAllow 查询 role 是否拥有访问 resource 的权限
 func (r *RBAC) IsAllow(role Roler, resource Resourcer) bool {
+	switch role.IsAllowHook(resource) {
+	case True:
+		return true
+	case False:
+		return false
+	}
+
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 

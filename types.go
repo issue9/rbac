@@ -4,6 +4,8 @@
 
 package rbac
 
+import "sync"
+
 const (
 	True = iota
 	False
@@ -27,4 +29,27 @@ type Roler interface {
 type Resourcer interface {
 	// 资源的唯一 ID，不能触发 panic，否则结束是未知的。
 	UniqueID() string
+}
+
+// 角色与资源的关联
+type roleResource struct {
+	sync.RWMutex
+	role      Roler
+	resources map[string]Resourcer // 当前用户的可访问资源列表
+}
+
+// 赋予当前角色访问 resource 的权限。
+func (r *roleResource) assgin(resource Resourcer) {
+	r.Lock()
+	r.resources[resource.UniqueID()] = resource
+	r.Unlock()
+}
+
+// 取消当前角色访问 resource 的权限
+//
+// NOTE: 依然可以从其父类继承该权限。
+func (r *roleResource) revoke(resource Resourcer) {
+	r.Lock()
+	delete(r.resources, resource.UniqueID())
+	r.Unlock()
 }

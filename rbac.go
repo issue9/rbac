@@ -17,20 +17,14 @@ var (
 
 type RBAC struct {
 	mu        sync.RWMutex
-	roles     map[string]roleResource
+	roles     map[string]*roleResource
 	resources map[string]Resourcer // 所有已注册资源列表
-}
-
-// 角色与资源的关联
-type roleResource struct {
-	role      Roler
-	resources map[string]Resourcer // 当前用户的可访问资源列表
 }
 
 // New 新建 RBAC
 func New() *RBAC {
 	return &RBAC{
-		roles:     make(map[string]roleResource, 100),
+		roles:     make(map[string]*roleResource, 100),
 		resources: make(map[string]Resourcer, 100),
 	}
 }
@@ -50,23 +44,19 @@ func (r *RBAC) AddResource(resource Resourcer) error {
 	return nil
 }
 
-// 移除资源
+// RemoveResource 移除资源
 func (r *RBAC) RemoveResource(resource Resourcer) {
-	r.mu.Lock()
-
 	// 删除注册的资源信息
+	r.mu.Lock()
 	delete(r.resources, resource.UniqueID())
+	r.mu.Unlock()
 
 	// 删除角色相关联的资源信息
+	r.mu.RLock()
 	for _, role := range r.roles {
-		for id := range role.resources {
-			if id == resource.UniqueID() {
-				delete(role.resources, id)
-				break
-			}
-		}
-	} // end for range r.roles
-	r.mu.Unlock()
+		role.revoke(resource)
+	}
+	r.mu.RUnlock()
 }
 
 // Assgin 赋予 role 访问 resource 的权限。
@@ -75,26 +65,24 @@ func (r *RBAC) RemoveResource(resource Resourcer) {
 // 若 role 已经拥有直接访问 resource 的权限，则不执行任何操作。
 func (r *RBAC) Assgin(role Roler, resource Resourcer) error {
 	r.mu.Lock()
-	defer r.mu.Unlock()
+	_, found := r.resources[resource.UniqueID()]
 
-	// 是否存在该资源
-	if _, found := r.resources[resource.UniqueID()]; !found {
+	if !found {
+		r.mu.Unlock()
 		return ErrResourceNotExists
 	}
 
 	elem, found := r.roles[role.UniqueID()]
-
 	if !found { // 未初始化该角色的相关信息
-		r.roles[role.UniqueID()] = roleResource{
+		elem = &roleResource{
 			role:      role,
-			resources: map[string]Resourcer{resource.UniqueID(): resource},
+			resources: make(map[string]Resourcer, 10),
 		}
-		return nil
+		r.roles[role.UniqueID()] = elem
 	}
+	r.mu.Unlock()
 
-	if _, found = elem.resources[resource.UniqueID()]; !found {
-		elem.resources[resource.UniqueID()] = resource
-	}
+	elem.assgin(resource)
 
 	return nil
 }
@@ -102,16 +90,15 @@ func (r *RBAC) Assgin(role Roler, resource Resourcer) error {
 // Revoke 取消 role 访问 resource 的权限，若父类还有访问 resource 的权限，
 // 则 role 依然可以访问 resource。
 func (r *RBAC) Revoke(role Roler, resource Resourcer) error {
-	r.mu.Lock()
-
+	r.mu.RLock()
 	elem, found := r.roles[role.UniqueID()]
+	r.mu.RUnlock()
+
 	if !found {
-		r.mu.Unlock()
 		return ErrRoleNotExists
 	}
-	delete(elem.resources, resource.UniqueID())
+	elem.revoke(resource)
 
-	r.mu.Unlock()
 	return nil
 }
 
@@ -140,14 +127,16 @@ func (r *RBAC) IsAllow(role Roler, resource Resourcer) bool {
 	}
 
 	r.mu.RLock()
-	defer r.mu.RUnlock()
-
 	elem, found := r.roles[role.UniqueID()]
+	r.mu.RUnlock()
 	if !found {
 		return false
 	}
 
-	if _, found = elem.resources[resource.UniqueID()]; found {
+	elem.RLock()
+	_, found = elem.resources[resource.UniqueID()]
+	elem.RUnlock()
+	if found {
 		return true
 	}
 

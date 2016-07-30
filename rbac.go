@@ -126,15 +126,14 @@ func (r *RBAC) IsAllow(role Roler, resource Resourcer) bool {
 	r.mu.RLock()
 	elem, found := r.roles[role.RoleID()]
 	r.mu.RUnlock()
-	if !found {
-		return false
-	}
 
-	elem.RLock()
-	_, found = elem.resources[resource.ResourceID()]
-	elem.RUnlock()
 	if found {
-		return true
+		elem.RLock()
+		_, found = elem.resources[resource.ResourceID()]
+		elem.RUnlock()
+		if found {
+			return true
+		}
 	}
 
 	for _, parent := range role.Parents() {

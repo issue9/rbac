@@ -77,4 +77,8 @@ func TestRBAC(t *testing.T) {
 	a.NotError(r.Assgin(usr1, res2))
 	a.True(r.IsAllow(usr1, res2))
 	a.True(r.IsAllow(usr1, res1)) // 通过 g1 间接获得权限
+
+	// usr1 本身已经已经不存在于 rbac 了，但依然可以通过关联的 g1 获取权限
+	r.RevokeAll(usr1)
+	a.True(r.IsAllow(usr1, res1))
 }

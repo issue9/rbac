@@ -15,19 +15,19 @@ func TestRBAC_AddRemoveResource(t *testing.T) {
 	r := New()
 	a.NotNil(r)
 
-	a.NotError(r.AddResource("1"))
-	a.NotError(r.AddResource("2"))
+	a.NotError(r.AddResource(&testResource{id: "1"}))
+	a.NotError(r.AddResource(&testResource{id: "2"}))
 	a.Equal(len(r.resources), 2)
 
 	// 添加相同资源
-	a.Error(r.AddResource("2"))
+	a.Error(r.AddResource(&testResource{id: "2"}))
 	a.Equal(len(r.resources), 2)
 
-	r.RemoveResource("1")
+	r.RemoveResource(&testResource{id: "1"})
 	a.Equal(len(r.resources), 1)
 
 	// 移除不存在的资源
-	r.RemoveResource("1")
+	r.RemoveResource(&testResource{id: "1"})
 	a.Equal(len(r.resources), 1)
 }
 
@@ -36,23 +36,26 @@ func TestRBAC_AssginRevoke(t *testing.T) {
 	r := New()
 	a.NotNil(r)
 
-	a.NotError(r.AddResource("res1"))
+	res1 := &testResource{id: "1"}
+	res2 := &testResource{id: "2"}
+	usr1 := &testUser{id: "1"}
+	a.NotError(r.AddResource(res1))
 
-	a.NotError(r.Assgin("usr1", "res1"))
-	a.NotError(r.Assgin("usr1", "res1")) // 相同资源
-	a.Error(r.Assgin("usr1", "res2"))    // 未注册的资源
-	a.True(r.IsAllow("usr1", "res1"))
+	a.NotError(r.Assgin(usr1, res1))
+	a.NotError(r.Assgin(usr1, res1)) // 相同资源
+	a.Error(r.Assgin(usr1, res2))    // 未注册的资源
+	a.True(r.IsAllow(usr1, res1))
 
-	a.NotError(r.Revoke("usr1", "res1"))
-	a.False(r.IsAllow("usr1", "res1"))
+	a.NotError(r.Revoke(usr1, res1))
+	a.False(r.IsAllow(usr1, res1))
 
 	// 移除资源，自动去掉相应的访问权限
-	a.NotError(r.Assgin("usr1", "res1"))
-	r.RemoveResource("res1")
-	a.False(r.IsAllow("usr1", "res1"))
+	a.NotError(r.Assgin(usr1, res1))
+	r.RemoveResource(res1)
+	a.False(r.IsAllow(usr1, res1))
 
 	// 角色不存在
-	a.Error(r.Revoke("usr3", "res1"))
+	a.Error(r.Revoke(&testUser{id: "3"}, res1))
 }
 
 func TestRBAC(t *testing.T) {
@@ -60,16 +63,22 @@ func TestRBAC(t *testing.T) {
 	r := New()
 	a.NotNil(r)
 
-	a.NotError(r.AddResource("res1"))
-	a.NotError(r.AddResource("res2"))
+	res1 := &testResource{id: "1"}
+	res2 := &testResource{id: "2"}
+	g1 := &testGroup{id: "1"}
+	usr1 := &testUser{id: "1", parent: g1}
+	a.NotError(r.AddResource(res1))
+	a.NotError(r.AddResource(res2))
 
-	a.False(r.IsAllow("g1", "res1"))
-	a.NotError(r.Assgin("g1", "res1"))
-	a.True(r.IsAllow("g1", "res1"))
+	a.False(r.IsAllow(g1, res1))
+	a.NotError(r.Assgin(g1, res1))
+	a.True(r.IsAllow(g1, res1))
 
-	a.NotError(r.Assgin("usr1", "res2"))
-	a.True(r.IsAllow("usr1", "res2"))
+	a.NotError(r.Assgin(usr1, res2))
+	a.True(r.IsAllow(usr1, res2))
+	a.True(r.IsAllow(usr1, res1)) // 通过 g1 间接获得权限
 
-	a.NotError(r.SetParents("usr1", "g1"))
-	a.True(r.IsAllow("usr1", "res1")) // 通过 g1 间接获得权限
+	// usr1 本身已经已经不存在于 rbac 了，但依然可以通过关联的 g1 获取权限
+	r.RevokeAll(usr1)
+	a.True(r.IsAllow(usr1, res1))
 }

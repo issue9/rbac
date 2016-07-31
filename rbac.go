@@ -17,162 +17,129 @@ var (
 
 type RBAC struct {
 	mu        sync.RWMutex
-	roles     map[string]*role
-	resources map[string]bool // 所有已注册资源列表
+	roles     map[string]*roleResource
+	resources map[string]Resourcer // 所有已注册资源列表
 }
 
 // New 新建 RBAC
 func New() *RBAC {
 	return &RBAC{
-		roles:     make(map[string]*role, 100),
-		resources: make(map[string]bool, 100),
+		roles:     make(map[string]*roleResource, 100),
+		resources: make(map[string]Resourcer, 100),
 	}
 }
 
 // AddResource 添加新的资源
-func (r *RBAC) AddResource(resource string) error {
+func (r *RBAC) AddResource(resource Resourcer) error {
 	r.mu.Lock()
 
-	for key, _ := range r.resources {
-		if key == resource {
-			r.mu.Unlock()
-			return ErrResourceExists
-		}
+	if _, found := r.resources[resource.ResourceID()]; found {
+		r.mu.Unlock()
+		return ErrResourceExists
 	}
-	r.resources[resource] = true
+
+	r.resources[resource.ResourceID()] = resource
 
 	r.mu.Unlock()
 	return nil
 }
 
-// RemoveResource 删除存在的资源，会同时去掉所有用户对该资源的访问权限。
-func (r *RBAC) RemoveResource(resource string) {
+// RemoveResource 移除资源
+func (r *RBAC) RemoveResource(resource Resourcer) {
+	// 删除注册的资源信息
 	r.mu.Lock()
-	delete(r.resources, resource)
+	delete(r.resources, resource.ResourceID())
 	r.mu.Unlock()
 
+	// 删除角色相关联的资源信息
+	r.mu.RLock()
 	for _, role := range r.roles {
 		role.revoke(resource)
 	}
+	r.mu.RUnlock()
 }
 
-// SetParent 设置角色 roleID 的父类为 parents，这会覆盖已有的父类内容。
+// Assgin 赋予 role 访问 resource 的权限。
 //
-// 若将 parents 传递为空值，相当于取消了其所有的父类。
-func (r *RBAC) SetParents(roleID string, parents ...string) error {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+// 即使其父类已有权限，也会再次给 role 直接赋予访问 resource 的权限。
+// 若 role 已经拥有直接访问 resource 的权限，则不执行任何操作。
+func (r *RBAC) Assgin(role Roler, resource Resourcer) error {
+	r.mu.Lock()
+	_, found := r.resources[resource.ResourceID()]
 
-	elem, found := r.roles[roleID]
 	if !found {
-		return ErrRoleNotExists
-	}
-
-	ps := make([]*role, 0, len(parents))
-	for _, parent := range parents {
-		role, found := r.roles[parent]
-		if !found {
-			return ErrRoleNotExists
-		}
-		ps = append(ps, role)
-	}
-
-	elem.setParents(ps)
-
-	return nil
-}
-
-// 为角色 roleID 添加新的父类 parents
-func (r *RBAC) AddParents(roleID string, parents ...string) error {
-	if len(parents) == 0 {
-		return errors.New("参数 parents 至少指定一个")
-	}
-
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-
-	elem, found := r.roles[roleID]
-	if !found {
-		return ErrRoleNotExists
-	}
-
-	ps := make([]*role, 0, len(parents))
-	for _, parent := range parents {
-		p, found := r.roles[parent]
-		if !found {
-			return ErrRoleNotExists
-		}
-		ps = append(ps, p)
-	}
-
-	elem.addParents(ps)
-
-	return nil
-}
-
-// Assgin 赋予 roleID 访问 resourceID 的权限。
-//
-// 即使其父类已有权限，也会再次给 roleID 直接赋予访问 resourceID 的权限。
-// 若 roleID 已经拥有直接访问 resourceID 的权限，则不执行任何操作。
-func (r *RBAC) Assgin(roleID, resourceID string) error {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-
-	if _, found := r.resources[resourceID]; !found {
+		r.mu.Unlock()
 		return ErrResourceNotExists
 	}
 
-	role, found := r.roles[roleID]
-	if !found {
-		role = newRole()
-		r.roles[roleID] = role
+	elem, found := r.roles[role.RoleID()]
+	if !found { // 未初始化该角色的相关信息
+		elem = newRoleResource(role)
+		r.roles[role.RoleID()] = elem
 	}
+	r.mu.Unlock()
 
-	role.assgin(resourceID)
+	elem.assgin(resource)
+
 	return nil
 }
 
-// Revoke 取消 roleID 访问 resourceID 的权限。
-// 若父类还有访问 resourceID 的权限，则 roleID 依然可以访问 resourceID。
-func (r *RBAC) Revoke(roleID, resourceID string) error {
+// Revoke 取消 role 访问 resource 的权限，若父类还有访问 resource 的权限，
+// 则 role 依然可以访问 resource。
+func (r *RBAC) Revoke(role Roler, resource Resourcer) error {
 	r.mu.RLock()
-	elem, found := r.roles[roleID]
+	elem, found := r.roles[role.RoleID()]
 	r.mu.RUnlock()
 
 	if !found {
 		return ErrRoleNotExists
 	}
-	elem.revoke(resourceID)
+	elem.revoke(resource)
+
 	return nil
 }
 
 // RevokeAll 取消某一角色的所有的权限
-func (r *RBAC) RevokeAll(roleID string) {
+func (r *RBAC) RevokeAll(role Roler) {
 	r.mu.Lock()
-	delete(r.roles, roleID)
+	delete(r.roles, role.RoleID())
 	r.mu.Unlock()
 }
 
-// HasRole 是否存在该角色的相关信息。
-func (r *RBAC) HasRole(roleID string) bool {
+// 指定角色是否存在于 RBAC
+func (r *RBAC) HasRole(role Roler) bool {
 	r.mu.RLock()
-	_, found := r.roles[roleID]
+	_, found := r.roles[role.RoleID()]
 	r.mu.RUnlock()
 	return found
 }
 
-// IsAllow 查询 roleID 是否拥有访问 resourceID 的权限
-//
-// 若角色或资源不存在，也返回 false。
-func (r *RBAC) IsAllow(roleID, resourceID string) bool {
-	r.mu.RLock()
-	elem, found := r.roles[roleID]
-	_, resFound := r.resources[resourceID]
-	r.mu.RUnlock()
-
-	if !found || !resFound {
+// IsAllow 查询 role 是否拥有访问 resource 的权限
+func (r *RBAC) IsAllow(role Roler, resource Resourcer) bool {
+	switch role.IsAllowHook(resource) {
+	case True:
+		return true
+	case False:
 		return false
 	}
 
-	return elem.isAllow(resourceID)
+	r.mu.RLock()
+	elem, found := r.roles[role.RoleID()]
+	r.mu.RUnlock()
+
+	if found {
+		elem.RLock()
+		_, found = elem.resources[resource.ResourceID()]
+		elem.RUnlock()
+		if found {
+			return true
+		}
+	}
+
+	for _, parent := range role.Parents() {
+		if parent != nil && r.IsAllow(parent, resource) {
+			return true
+		}
+	}
+	return false
 }

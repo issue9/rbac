@@ -19,13 +19,15 @@ type RBAC struct {
 	mu        sync.RWMutex
 	roles     map[string]*roleResource
 	resources map[string]Resourcer // 所有已注册资源列表
+	getRole   func(Roler)          //
 }
 
 // New 新建 RBAC
-func New() *RBAC {
+func New(get func(Roler)) *RBAC {
 	return &RBAC{
 		roles:     make(map[string]*roleResource, 100),
 		resources: make(map[string]Resourcer, 100),
+		getRole:   get,
 	}
 }
 
@@ -57,6 +59,31 @@ func (r *RBAC) RemoveResource(resource Resourcer) {
 		role.revoke(resource)
 	}
 	r.mu.RUnlock()
+}
+
+// Resources 获取所有已注册的资源
+func (r *RBAC) Resources() []Resourcer {
+	ret := make([]Resourcer, len(r.resources))
+
+	r.mu.RLock()
+	for _, res := range r.resources {
+		ret = append(ret, res)
+	}
+	r.mu.RUnlock()
+
+	return ret
+}
+
+// RoleResources 与该角色有直接访问权限的所有资源
+func (r *RBAC) RoleResources(role Roler) []Resourcer {
+	r.mu.RLock()
+	roleRes, found := r.roles[role.RoleID()]
+	r.mu.RUnlock()
+	if !found {
+		return nil
+	}
+
+	return roleRes.roleResources()
 }
 
 // Assgin 赋予 role 访问 resource 的权限。
@@ -106,7 +133,7 @@ func (r *RBAC) RevokeAll(role Roler) {
 	r.mu.Unlock()
 }
 
-// 指定角色是否存在于 RBAC
+// HasRole 指定角色是否存在于 RBAC
 func (r *RBAC) HasRole(role Roler) bool {
 	r.mu.RLock()
 	_, found := r.roles[role.RoleID()]
@@ -114,18 +141,31 @@ func (r *RBAC) HasRole(role Roler) bool {
 	return found
 }
 
-// IsAllow 查询 role 是否拥有访问 resource 的权限
-func (r *RBAC) IsAllow(role Roler, resource Resourcer) bool {
-	switch role.IsAllowHook(resource) {
-	case True:
-		return true
-	case False:
-		return false
-	}
+// Role 获取指定 ID 的角色
+func (r *RBAC) Role(roleID string) Roler {
+	r.mu.RLock()
+	elem := r.roles[roleID]
+	r.mu.RUnlock()
 
+	return elem.role
+}
+
+// IsAllow 查询 role 是否拥有访问 resource 的权限
+//
+// 当角色不存在时，会尝试调用 RBAC.getRole 来更新角色信息。
+// 若角色信息实在找不到，也会尝试调用其父类来查找权限。
+func (r *RBAC) IsAllow(role Roler, resource Resourcer) bool {
 	r.mu.RLock()
 	elem, found := r.roles[role.RoleID()]
 	r.mu.RUnlock()
+
+	if !found && r.getRole != nil {
+		r.getRole(role)
+
+		r.mu.RLock()
+		elem, found = r.roles[role.RoleID()]
+		r.mu.RUnlock()
+	}
 
 	if found {
 		elem.RLock()

@@ -12,7 +12,7 @@ import (
 
 func TestRBAC_AddRemoveResource(t *testing.T) {
 	a := assert.New(t)
-	r := New()
+	r := New(nil)
 	a.NotNil(r)
 
 	a.NotError(r.AddResource(&testResource{id: "1"}))
@@ -33,7 +33,7 @@ func TestRBAC_AddRemoveResource(t *testing.T) {
 
 func TestRBAC_AssginRevoke(t *testing.T) {
 	a := assert.New(t)
-	r := New()
+	r := New(nil)
 	a.NotNil(r)
 
 	res1 := &testResource{id: "1"}
@@ -58,27 +58,38 @@ func TestRBAC_AssginRevoke(t *testing.T) {
 	a.Error(r.Revoke(&testUser{id: "3"}, res1))
 }
 
-func TestRBAC(t *testing.T) {
+func TestRBAC_IsAllow(t *testing.T) {
 	a := assert.New(t)
-	r := New()
+	r := New(nil)
 	a.NotNil(r)
 
-	res1 := &testResource{id: "1"}
-	res2 := &testResource{id: "2"}
-	g1 := &testGroup{id: "1"}
-	usr1 := &testUser{id: "1", parent: g1}
-	a.NotError(r.AddResource(res1))
-	a.NotError(r.AddResource(res2))
+	ures1 := &testResource{id: "u1"}
+	ures2 := &testResource{id: "u2"}
+	gres1 := &testResource{id: "g1"}
+	gres2 := &testResource{id: "g2"}
+	a.NotError(r.AddResource(ures1))
+	a.NotError(r.AddResource(ures2))
+	a.NotError(r.AddResource(gres1))
+	a.NotError(r.AddResource(gres2))
 
-	a.False(r.IsAllow(g1, res1))
-	a.NotError(r.Assgin(g1, res1))
-	a.True(r.IsAllow(g1, res1))
+	g1 := &testGroup{id: "g1"}
+	usr1 := &testUser{id: "u1", parent: g1}
+	a.False(r.IsAllow(g1, gres1)) // 还未执行 assgin 操作
+	a.NotError(r.Assgin(g1, gres1))
+	a.True(r.IsAllow(g1, gres1))
 
-	a.NotError(r.Assgin(usr1, res2))
-	a.True(r.IsAllow(usr1, res2))
-	a.True(r.IsAllow(usr1, res1)) // 通过 g1 间接获得权限
+	a.NotError(r.Assgin(usr1, ures1))
+	a.True(r.IsAllow(usr1, ures1))
+	a.True(r.IsAllow(usr1, gres1)) // 通过 g1 间接获得权限
+
+	// 虽然是同一个 roleID，但是 parent 已经不同
+	g2 := &testGroup{id: "g2"}
+	usr1Copy := &testUser{id: "u1", parent: g2}
+	a.NotError(r.Assgin(g2, gres2))
+	a.True(r.IsAllow(usr1Copy, gres2))
+	a.False(r.IsAllow(usr1Copy, gres1))
 
 	// usr1 本身已经已经不存在于 rbac 了，但依然可以通过关联的 g1 获取权限
 	r.RevokeAll(usr1)
-	a.True(r.IsAllow(usr1, res1))
+	a.True(r.IsAllow(usr1, gres1))
 }

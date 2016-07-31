@@ -18,10 +18,6 @@ func (r *testGroup) Parents() []Roler {
 	return nil
 }
 
-func (r *testGroup) IsAllowHook(resource Resourcer) int {
-	return Continue
-}
-
 ///////////////// user
 
 type testUser struct {
@@ -35,10 +31,6 @@ func (r *testUser) RoleID() string {
 
 func (r *testUser) Parents() []Roler {
 	return []Roler{r.parent}
-}
-
-func (r *testUser) IsAllowHook(resource Resourcer) int {
-	return Continue
 }
 
 /////////////// resource

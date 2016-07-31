@@ -6,12 +6,6 @@ package rbac
 
 import "sync"
 
-const (
-	True = iota
-	False
-	Continue
-)
-
 // 角色接口
 type Roler interface {
 	// 角色的唯一 ID，不能触发 panic，否则结果是未知的。
@@ -19,10 +13,6 @@ type Roler interface {
 
 	// 当前角色的所直接父类
 	Parents() []Roler
-
-	// 在 RBAC.IsAllow() 中判断当前角色是否拥有对 Resource
-	// 访问权之前进行调用的勾子函数。
-	IsAllowHook(Resourcer) int
 }
 
 // 资源接口
@@ -43,6 +33,18 @@ func newRoleResource(role Roler) *roleResource {
 		role:      role,
 		resources: make(map[string]Resourcer, 10),
 	}
+}
+
+func (r *roleResource) roleResources() []Resourcer {
+	ret := make([]Resourcer, 0, len(r.resources))
+
+	r.RLock()
+	for _, res := range r.resources {
+		ret = append(ret, res)
+	}
+	r.RUnlock()
+
+	return ret
 }
 
 // 赋予当前角色访问 resource 的权限。

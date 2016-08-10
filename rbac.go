@@ -61,6 +61,15 @@ func (r *RBAC) RemoveResource(resource Resourcer) {
 	r.mu.RUnlock()
 }
 
+// HasResource 指定 id 的资源是否存在
+func (r *RBAC) HasResource(resourceID string) bool {
+	r.mu.RLock()
+	_, found := r.resources[resourceID]
+	r.mu.RUnlock()
+
+	return found
+}
+
 // Resources 获取所有已注册的资源
 func (r *RBAC) Resources() []Resourcer {
 	ret := make([]Resourcer, len(r.resources))

@@ -72,7 +72,7 @@ func (r *RBAC) HasResource(resourceID string) bool {
 
 // Resources 获取所有已注册的资源
 func (r *RBAC) Resources() []Resourcer {
-	ret := make([]Resourcer, len(r.resources))
+	ret := make([]Resourcer, 0, len(r.resources))
 
 	r.mu.RLock()
 	for _, res := range r.resources {

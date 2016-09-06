@@ -6,7 +6,7 @@ package rbac
 
 import "sync"
 
-// 角色接口
+// Roler 角色接口
 type Roler interface {
 	// 角色的唯一 ID，不能触发 panic，否则结果是未知的。
 	RoleID() string
@@ -15,10 +15,23 @@ type Roler interface {
 	Parents() []Roler
 }
 
-// 资源接口
+// Resourcer 资源接口
 type Resourcer interface {
 	// 资源的唯一 ID，不能触发 panic，否则结果是未知的。
 	ResourceID() string
+}
+
+// 默认的 Roler 接口实现。
+type defaultRole struct {
+	id string
+}
+
+func (r defaultRole) RoleID() string {
+	return r.id
+}
+
+func (r defaultRole) Parents() []Roler {
+	return nil
 }
 
 // 角色与资源的关联

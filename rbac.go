@@ -19,7 +19,7 @@ type RBAC struct {
 	mu        sync.RWMutex
 	roles     map[string]*roleResource
 	resources map[string]Resourcer // 所有已注册资源列表
-	getRole   func(Roler)          //
+	getRole   func(Roler)
 }
 
 // New 新建 RBAC
@@ -88,6 +88,14 @@ func (r *RBAC) RoleResources(role Roler) []Resourcer {
 	r.mu.RLock()
 	roleRes, found := r.roles[role.RoleID()]
 	r.mu.RUnlock()
+
+	if !found && r.getRole != nil {
+		r.getRole(role)
+		r.mu.RLock()
+		roleRes, found = r.roles[role.RoleID()]
+		r.mu.RUnlock()
+	}
+
 	if !found {
 		return nil
 	}
@@ -147,14 +155,30 @@ func (r *RBAC) HasRole(role Roler) bool {
 	r.mu.RLock()
 	_, found := r.roles[role.RoleID()]
 	r.mu.RUnlock()
+
+	if !found && r.getRole != nil {
+		r.getRole(role)
+		r.mu.RLock()
+		_, found = r.roles[role.RoleID()]
+		r.mu.RUnlock()
+	}
+
 	return found
 }
 
 // Role 获取指定 ID 的角色
 func (r *RBAC) Role(roleID string) Roler {
 	r.mu.RLock()
-	elem := r.roles[roleID]
+	elem, found := r.roles[roleID]
 	r.mu.RUnlock()
+
+	if !found && r.getRole != nil {
+		role := defaultRole{id: roleID}
+		r.getRole(role)
+		r.mu.RLock()
+		elem, found = r.roles[role.RoleID()]
+		r.mu.RUnlock()
+	}
 
 	return elem.role
 }

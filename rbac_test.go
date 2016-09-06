@@ -10,6 +10,8 @@ import (
 	"github.com/issue9/assert"
 )
 
+var _ Roler = defaultRole{}
+
 func TestRBAC_AddRemoveResource(t *testing.T) {
 	a := assert.New(t)
 	r := New(nil)

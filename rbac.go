@@ -109,7 +109,7 @@ func (r *RBAC) RoleResources(role Roler) []Resourcer {
 // 若 role 已经拥有直接访问 resource 的权限，则不执行任何操作。
 func (r *RBAC) Assgin(role Roler, resource Resourcer) error {
 	r.mu.Lock()
-	_, found := r.resources[resource.ResourceID()]
+	res, found := r.resources[resource.ResourceID()]
 
 	if !found {
 		r.mu.Unlock()
@@ -123,7 +123,9 @@ func (r *RBAC) Assgin(role Roler, resource Resourcer) error {
 	}
 	r.mu.Unlock()
 
-	elem.assgin(resource)
+	// 使用 res，而不是 resource，因为 resource 可能只是一个带 ID 的简单类
+	// 而 res 是通过 AddResource 注册的，附带的信息应该是全的。
+	elem.assgin(res)
 
 	return nil
 }

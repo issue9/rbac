@@ -2,6 +2,7 @@
 // Use of this source code is governed by a MIT
 // license that can be found in the LICENSE file.
 
+// Package rbac 简单的 RBAC 权限规则实现
 package rbac
 
 import (
@@ -9,6 +10,7 @@ import (
 	"sync"
 )
 
+// 一此错误信息
 var (
 	ErrResourceExists    = errors.New("资源已经存在")
 	ErrResourceNotExists = errors.New("资源不存在")

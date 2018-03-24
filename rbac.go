@@ -17,6 +17,7 @@ var (
 	ErrRoleNotExists     = errors.New("角色不存在")
 )
 
+// RBAC 权限管理类
 type RBAC struct {
 	mu        sync.RWMutex
 	roles     map[string]*roleResource

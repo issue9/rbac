@@ -14,210 +14,201 @@ import (
 var (
 	ErrResourceExists    = errors.New("资源已经存在")
 	ErrResourceNotExists = errors.New("资源不存在")
-	ErrRoleNotExists     = errors.New("角色不存在")
 )
 
 // RBAC 权限管理类
 type RBAC struct {
-	mu        sync.RWMutex
-	roles     map[string]*roleResource
-	resources map[string]Resourcer // 所有已注册资源列表
-	getRole   func(Roler)
+	locker sync.RWMutex
+	roles  map[string]*role
+	// 所有注册的资源，键名为资源唯一名称，键值为资源的描述信息
+	resources map[string]string
 }
 
 // New 新建 RBAC
-func New(get func(Roler)) *RBAC {
+func New() *RBAC {
 	return &RBAC{
-		roles:     make(map[string]*roleResource, 100),
-		resources: make(map[string]Resourcer, 100),
-		getRole:   get,
+		roles:     make(map[string]*role, 100),
+		resources: make(map[string]string, 100),
 	}
 }
 
-// AddResource 添加新的资源
-func (r *RBAC) AddResource(resource Resourcer) error {
-	r.mu.Lock()
+// SetRole 设置角色
+func (rbac *RBAC) SetRole(id string, parent string) {
+	r := rbac.getRole(id)
+	p := rbac.getRole(parent)
+	r.parent = p
+}
 
-	if _, found := r.resources[resource.ResourceID()]; found {
-		r.mu.Unlock()
+// AddResource 添加新的资源
+func (rbac *RBAC) AddResource(id, desc string) error {
+	rbac.locker.Lock()
+	defer rbac.locker.Unlock()
+
+	if _, found := rbac.resources[id]; found {
 		return ErrResourceExists
 	}
 
-	r.resources[resource.ResourceID()] = resource
+	rbac.resources[id] = desc
 
-	r.mu.Unlock()
+	return nil
+}
+
+// AddResources 添加多条新的资源信息
+func (rbac *RBAC) AddResources(res map[string]string) error {
+	rbac.locker.Lock()
+	defer rbac.locker.Unlock()
+
+	for id, desc := range res {
+		if _, found := rbac.resources[id]; found {
+			return ErrResourceExists
+		}
+		rbac.resources[id] = desc
+	}
+
 	return nil
 }
 
 // RemoveResource 移除资源
-func (r *RBAC) RemoveResource(resource Resourcer) {
+func (rbac *RBAC) RemoveResource(id string) {
 	// 删除注册的资源信息
-	r.mu.Lock()
-	delete(r.resources, resource.ResourceID())
-	r.mu.Unlock()
+	rbac.locker.Lock()
+	delete(rbac.resources, id)
+	rbac.locker.Unlock()
 
 	// 删除角色相关联的资源信息
-	r.mu.RLock()
-	for _, role := range r.roles {
-		role.revoke(resource)
+	rbac.locker.RLock()
+	for _, role := range rbac.roles {
+		role.revoke(id)
 	}
-	r.mu.RUnlock()
+	rbac.locker.RUnlock()
 }
 
 // HasResource 指定 id 的资源是否存在
-func (r *RBAC) HasResource(resourceID string) bool {
-	r.mu.RLock()
-	_, found := r.resources[resourceID]
-	r.mu.RUnlock()
+func (rbac *RBAC) HasResource(id string) bool {
+	rbac.locker.RLock()
+	_, found := rbac.resources[id]
+	rbac.locker.RUnlock()
 
 	return found
 }
 
 // Resources 获取所有已注册的资源
-func (r *RBAC) Resources() []Resourcer {
-	ret := make([]Resourcer, 0, len(r.resources))
+func (rbac *RBAC) Resources() map[string]string {
+	ret := make(map[string]string, len(rbac.resources))
 
-	r.mu.RLock()
-	for _, res := range r.resources {
-		ret = append(ret, res)
+	rbac.locker.RLock()
+	for id, desc := range rbac.resources {
+		ret[id] = desc
 	}
-	r.mu.RUnlock()
+	rbac.locker.RUnlock()
 
 	return ret
 }
 
 // RoleResources 与该角色有直接访问权限的所有资源
-func (r *RBAC) RoleResources(role Roler) []Resourcer {
-	r.mu.RLock()
-	roleRes, found := r.roles[role.RoleID()]
-	r.mu.RUnlock()
-
-	if !found && r.getRole != nil {
-		r.getRole(role)
-		r.mu.RLock()
-		roleRes, found = r.roles[role.RoleID()]
-		r.mu.RUnlock()
-	}
+func (rbac *RBAC) RoleResources(id string) map[string]bool {
+	rbac.locker.RLock()
+	role, found := rbac.roles[id]
+	rbac.locker.RUnlock()
 
 	if !found {
 		return nil
 	}
 
-	return roleRes.roleResources()
+	return role.resources
 }
 
-// Assgin 赋予 role 访问 resource 的权限。
+// Allow 赋予 role 访问 resource 的权限。
 //
 // 即使其父类已有权限，也会再次给 role 直接赋予访问 resource 的权限。
 // 若 role 已经拥有直接访问 resource 的权限，则不执行任何操作。
-func (r *RBAC) Assgin(role Roler, resource Resourcer) error {
-	r.mu.Lock()
-	res, found := r.resources[resource.ResourceID()]
+func (rbac *RBAC) Allow(role, resource string) error {
+	rbac.locker.RLock()
+	_, found := rbac.resources[resource]
+	rbac.locker.RUnlock()
 
 	if !found {
-		r.mu.Unlock()
 		return ErrResourceNotExists
 	}
 
-	elem, found := r.roles[role.RoleID()]
-	if !found { // 未初始化该角色的相关信息
-		elem = newRoleResource(role)
-		r.roles[role.RoleID()] = elem
-	}
-	r.mu.Unlock()
-
-	// 使用 res，而不是 resource，因为 resource 可能只是一个带 ID 的简单类
-	// 而 res 是通过 AddResource 注册的，附带的信息应该是全的。
-	elem.assgin(res)
-
+	rbac.getRole(role).allow(resource)
 	return nil
 }
 
-// Revoke 取消 role 访问 resource 的权限，若父类还有访问 resource 的权限，
-// 则 role 依然可以访问 resource。
-func (r *RBAC) Revoke(role Roler, resource Resourcer) error {
-	r.mu.RLock()
-	elem, found := r.roles[role.RoleID()]
-	r.mu.RUnlock()
+// Deny 禁止当前用户对当前资源的访问权限。
+//
+// 不同于 Revoke，被禁用之的，即使上游有权限访问，也会被拒绝
+func (rbac *RBAC) Deny(role, resource string) error {
+	rbac.locker.RLock()
+	_, found := rbac.resources[resource]
+	rbac.locker.RUnlock()
 
 	if !found {
-		return ErrRoleNotExists
+		return ErrResourceNotExists
 	}
-	elem.revoke(resource)
 
+	rbac.getRole(role).deny(resource)
 	return nil
 }
 
-// RevokeAll 取消某一角色的所有的权限
-func (r *RBAC) RevokeAll(role Roler) {
-	r.mu.Lock()
-	delete(r.roles, role.RoleID())
-	r.mu.Unlock()
-}
+// Revoke 取消 role 访问 resource 的权限限制，恢复成默认状态。
+//
+// 其依然可以从父类继承相关的权限信息。
+func (rbac *RBAC) Revoke(role, resource string) error {
+	rbac.locker.RLock()
+	_, found := rbac.resources[resource]
+	rbac.locker.RUnlock()
 
-// HasRole 指定角色是否存在于 RBAC
-func (r *RBAC) HasRole(role Roler) bool {
-	r.mu.RLock()
-	_, found := r.roles[role.RoleID()]
-	r.mu.RUnlock()
-
-	if !found && r.getRole != nil {
-		r.getRole(role)
-		r.mu.RLock()
-		_, found = r.roles[role.RoleID()]
-		r.mu.RUnlock()
+	if !found {
+		return ErrResourceNotExists
 	}
 
-	return found
+	rbac.getRole(role).revoke(resource)
+	return nil
 }
 
-// Role 获取指定 ID 的角色
-func (r *RBAC) Role(roleID string) Roler {
-	r.mu.RLock()
-	elem, found := r.roles[roleID]
-	r.mu.RUnlock()
+// RevokeRole 取消某一角色的所有的权限
+//
+// 其依然可以从父类继承相关的权限信息。
+func (rbac *RBAC) RevokeRole(role string) {
+	rbac.getRole(role).resources = map[string]bool{}
+}
 
-	if !found && r.getRole != nil {
-		role := defaultRole{id: roleID}
-		r.getRole(role)
-		r.mu.RLock()
-		elem, found = r.roles[role.RoleID()]
-		r.mu.RUnlock()
+// 获取指定 ID 的角色，若不存在，则生成一个数据。
+func (rbac *RBAC) getRole(id string) *role {
+	rbac.locker.Lock()
+	defer rbac.locker.Unlock()
+
+	r, found := rbac.roles[id]
+	if !found { // 未初始化该角色的相关信息
+		r = &role{
+			id: id,
+		}
+		rbac.roles[id] = r
 	}
 
-	return elem.role
+	return r
 }
 
 // IsAllow 查询 role 是否拥有访问 resource 的权限
 //
-// 当角色不存在时，会尝试调用 RBAC.getRole 来更新角色信息。
-// 若角色信息实在找不到，也会尝试调用其父类来查找权限。
-func (r *RBAC) IsAllow(role Roler, resource Resourcer) bool {
-	r.mu.RLock()
-	elem, found := r.roles[role.RoleID()]
-	r.mu.RUnlock()
+// 当角色本身没有明确指出是否拥有该权限时，会尝试查找父类的权限系统。
+func (rbac *RBAC) IsAllow(role, resource string) bool {
+	rbac.locker.RLock()
+	r, found := rbac.roles[role]
+	rbac.locker.RUnlock()
 
-	if !found && r.getRole != nil {
-		r.getRole(role)
-
-		r.mu.RLock()
-		elem, found = r.roles[role.RoleID()]
-		r.mu.RUnlock()
+	if !found {
+		return false
 	}
 
-	if found {
-		elem.RLock()
-		_, found = elem.resources[resource.ResourceID()]
-		elem.RUnlock()
-		if found {
-			return true
-		}
+	if allow, ok := r.resources[resource]; ok {
+		return allow
 	}
 
-	for _, parent := range role.Parents() {
-		if parent != nil && r.IsAllow(parent, resource) {
-			return true
-		}
+	if r.parent != nil {
+		return rbac.IsAllow(r.parent.id, resource)
 	}
+
 	return false
 }

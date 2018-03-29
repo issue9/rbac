@@ -10,27 +10,6 @@ import (
 	"github.com/issue9/assert"
 )
 
-func TestRBAC_AddRemoveResource(t *testing.T) {
-	a := assert.New(t)
-	r := New()
-	a.NotNil(r)
-
-	a.NotError(r.AddResource("1", "desc"))
-	a.NotError(r.AddResource("2,", "desc"))
-	a.Equal(len(r.resources), 2)
-
-	// 添加相同资源
-	a.Error(r.AddResource("2", "2desc"))
-	a.Equal(len(r.resources), 2)
-
-	r.RemoveResource("1")
-	a.Equal(len(r.resources), 1)
-
-	// 移除不存在的资源
-	r.RemoveResource("1")
-	a.Equal(len(r.resources), 1)
-}
-
 func TestRBAC_AllowDenyRevoke(t *testing.T) {
 	a := assert.New(t)
 	r := New()

@@ -3,6 +3,10 @@
 // license that can be found in the LICENSE file.
 
 // Package rbac 简单的 RBAC 权限规则实现
+//
+// 分类角色和资源两部分。
+// 角色可以设置其上一级，除了被明确禁止的，所有权限可以从上一级继承下来。
+// 资源直接从属于角色。
 package rbac
 
 import "sync"
@@ -23,8 +27,11 @@ func New() *RBAC {
 // SetRole 设置角色
 func (rbac *RBAC) SetRole(id string, parent string) {
 	r := rbac.getRole(id)
-	p := rbac.getRole(parent)
-	r.parent = p
+
+	if parent != "" {
+		p := rbac.getRole(parent)
+		r.parent = p
+	}
 }
 
 // RoleResources 与该角色有直接访问权限的所有资源

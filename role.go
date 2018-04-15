@@ -4,12 +4,10 @@
 
 package rbac
 
-import (
-	"sync"
-)
+import "sync"
 
 type role struct {
-	sync.Locker
+	sync.Mutex
 
 	id string
 
@@ -17,6 +15,7 @@ type role struct {
 	//
 	// 只能有一个父类角色，如果有多个父类角色，可能造成权限紊乱，
 	// 比如父 A 允许某个权限，而父类 B 不允许。
+	// 单个父类角色，可以根据上下级关系确定是否允许当前操作。
 	parent *role
 
 	// 当前角色所拥有的权限信息，若值为 false，表示明确限制访问。
@@ -25,7 +24,7 @@ type role struct {
 
 // 赋予当前角色访问 id 的权限。
 func (r *role) allow(id string) {
-	if len(r.resources) == 0 {
+	if r.resources == nil {
 		r.resources = map[string]bool{id: true}
 		return
 	}
@@ -37,7 +36,7 @@ func (r *role) allow(id string) {
 
 // 赋予当前角色访问 id 的权限。
 func (r *role) deny(id string) {
-	if len(r.resources) == 0 {
+	if r.resources == nil {
 		r.resources = map[string]bool{id: false}
 		return
 	}
@@ -51,6 +50,10 @@ func (r *role) deny(id string) {
 //
 // NOTE: 依然可以从其父类继承该权限。
 func (r *role) revoke(id string) {
+	if r.resources == nil {
+		return
+	}
+
 	r.Lock()
 	delete(r.resources, id)
 	r.Unlock()

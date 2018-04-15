@@ -10,65 +10,45 @@ import (
 	"github.com/issue9/assert"
 )
 
-func TestRBAC_AllowDenyRevoke(t *testing.T) {
+func TestRBAC(t *testing.T) {
 	a := assert.New(t)
 	r := New()
 	a.NotNil(r)
 
-	res2 := &testResource{id: "2"}
-	usr1 := &testUser{id: "1"}
+	r.Allow("u1", "r1")
+	a.True(r.IsAllow("u1", "r1"))
+	a.False(r.IsAllow("u1", "r2")) // r2 不存在
 
-	a.NotError(r.AddResource("1", "desc"))
+	r.Deny("u1", "r2")
+	a.False(r.IsAllow("u1", "r2"))
 
-	a.NotError(r.Assgin(usr1, res1))
-	a.NotError(r.Assgin(usr1, res1)) // 相同资源
-	a.Error(r.Assgin(usr1, res2))    // 未注册的资源
-	a.True(r.IsAllow(usr1, res1))
+	r.Revoke("u1", "r1")
+	a.False(r.IsAllow("u1", "r1"))
 
-	a.NotError(r.Revoke(usr1, res1))
-	a.False(r.IsAllow(usr1, res1))
+	// 通过继续父类得到权限
+	r.SetRole("u1", "u2")
+	r.Allow("u2", "r10")
+	a.True(r.IsAllow("u1", "r10"))
 
-	// 移除资源，自动去掉相应的访问权限
-	a.NotError(r.Assgin(usr1, res1))
-	r.RemoveResource(res1)
-	a.False(r.IsAllow(usr1, res1))
-
-	// 角色不存在
-	a.Error(r.Revoke(&testUser{id: "3"}, res1))
+	r.Deny("u1", "r10")
+	a.False(r.IsAllow("u1", "r10"))
 }
 
-func TestRBAC_IsAllow(t *testing.T) {
+func TestRBAC_resources(t *testing.T) {
 	a := assert.New(t)
-	r := New(nil)
+	r := New()
 	a.NotNil(r)
 
-	ures1 := &testResource{id: "u1"}
-	ures2 := &testResource{id: "u2"}
-	gres1 := &testResource{id: "g1"}
-	gres2 := &testResource{id: "g2"}
-	a.NotError(r.AddResource(ures1))
-	a.NotError(r.AddResource(ures2))
-	a.NotError(r.AddResource(gres1))
-	a.NotError(r.AddResource(gres2))
+	r.Allow("u1", "r1")
+	r.Allow("u1", "r2")
+	r.Deny("u1", "r3")
 
-	g1 := &testGroup{id: "g1"}
-	usr1 := &testUser{id: "u1", parent: g1}
-	a.False(r.IsAllow(g1, gres1)) // 还未执行 assgin 操作
-	a.NotError(r.Assgin(g1, gres1))
-	a.True(r.IsAllow(g1, gres1))
+	a.Equal(r.RoleResources("u1"), map[string]bool{
+		"r1": true,
+		"r2": true,
+		"r3": false,
+	})
 
-	a.NotError(r.Assgin(usr1, ures1))
-	a.True(r.IsAllow(usr1, ures1))
-	a.True(r.IsAllow(usr1, gres1)) // 通过 g1 间接获得权限
-
-	// 虽然是同一个 roleID，但是 parent 已经不同
-	g2 := &testGroup{id: "g2"}
-	usr1Copy := &testUser{id: "u1", parent: g2}
-	a.NotError(r.Assgin(g2, gres2))
-	a.True(r.IsAllow(usr1Copy, gres2))
-	a.False(r.IsAllow(usr1Copy, gres1))
-
-	// usr1 本身已经已经不存在于 rbac 了，但依然可以通过关联的 g1 获取权限
-	r.RevokeAll(usr1)
-	a.True(r.IsAllow(usr1, gres1))
+	r.RevokeRole("u1")
+	a.Empty(r.RoleResources("u1"))
 }

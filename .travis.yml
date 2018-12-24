@@ -9,7 +9,7 @@ go:
   - 1.11
 
 script:
-  - GO111MODULE=on go test -race -v -coverprofile=coverage.txt -covermode=atomic list ./...
+  - GO111MODULE=on go test -race -v -coverprofile=coverage.txt -covermode=atomic ./...
 
 after_success:
   - bash <(curl -s https://codecov.io/bash)

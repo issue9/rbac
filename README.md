@@ -1,4 +1,6 @@
-rbac [![Build Status](https://travis-ci.org/issue9/rbac.svg?branch=master)](https://travis-ci.org/issue9/rbac)
+rbac
+[![Build Status](https://travis-ci.org/issue9/rbac.svg?branch=master)](https://travis-ci.org/issue9/rbac)
+[![Build status](https://ci.appveyor.com/api/projects/status/t4gu98qaoiu0v5sk?svg=true)](https://ci.appveyor.com/project/caixw/rbac)
 ======
 
 

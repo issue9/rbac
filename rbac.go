@@ -1,6 +1,4 @@
-// Copyright 2016 by caixw, All rights reserved.
-// Use of this source code is governed by a MIT
-// license that can be found in the LICENSE file.
+// SPDX-License-Identifier: MIT
 
 // Package rbac 简单的 RBAC 权限规则实现
 //
@@ -62,9 +60,9 @@ func (rbac *RBAC) Deny(role, resource string) {
 	rbac.getRole(role).deny(resource)
 }
 
-// Revoke 取消 role 访问 resource 的权限限制，恢复成默认状态。
+// Revoke 取消 role 访问 resource 的权限限制
 //
-// 其依然可以从父类继承相关的权限信息。
+// 恢复成默认状态，其依然可以从父类继承相关的权限信息。
 func (rbac *RBAC) Revoke(role, resource string) {
 	rbac.getRole(role).revoke(resource)
 }

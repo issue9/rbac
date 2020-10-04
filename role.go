@@ -1,6 +1,4 @@
-// Copyright 2016 by caixw, All rights reserved.
-// Use of this source code is governed by a MIT
-// license that can be found in the LICENSE file.
+// SPDX-License-Identifier: MIT
 
 package rbac
 
@@ -34,7 +32,7 @@ func (r *role) allow(id string) {
 	r.Unlock()
 }
 
-// 赋予当前角色访问 id 的权限
+// 禁用当前角色访问 id 的权限
 func (r *role) deny(id string) {
 	if r.resources == nil {
 		r.resources = map[string]bool{id: false}

@@ -4,7 +4,7 @@
 
 // Package rbac 简单的 RBAC 权限规则实现
 //
-// 分类角色和资源两部分。
+// 分为角色和资源两部分。
 // 角色可以设置其上一级，除了被明确禁止的，所有权限可以从上一级继承下来。
 // 资源直接从属于角色。
 package rbac
@@ -47,7 +47,7 @@ func (rbac *RBAC) RoleResources(id string) map[string]bool {
 	return role.resources
 }
 
-// Allow 赋予 role 访问 resource 的权限。
+// Allow 赋予 role 访问 resource 的权限
 //
 // 即使其父类已有权限，也会再次给 role 直接赋予访问 resource 的权限。
 // 若 role 已经拥有直接访问 resource 的权限，则不执行任何操作。
@@ -55,7 +55,7 @@ func (rbac *RBAC) Allow(role, resource string) {
 	rbac.getRole(role).allow(resource)
 }
 
-// Deny 禁止当前用户对当前资源的访问权限。
+// Deny 禁止当前用户对当前资源的访问权限
 //
 // 不同于 Revoke，被禁用之的，即使上游有权限访问，也会被拒绝
 func (rbac *RBAC) Deny(role, resource string) {

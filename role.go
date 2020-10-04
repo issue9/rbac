@@ -11,7 +11,7 @@ type role struct {
 
 	id string
 
-	// 父类角色。
+	// 父类角色
 	//
 	// 只能有一个父类角色，如果有多个父类角色，可能造成权限紊乱，
 	// 比如父 A 允许某个权限，而父类 B 不允许。
@@ -22,7 +22,7 @@ type role struct {
 	resources map[string]bool
 }
 
-// 赋予当前角色访问 id 的权限。
+// 赋予当前角色访问 id 的权限
 func (r *role) allow(id string) {
 	if r.resources == nil {
 		r.resources = map[string]bool{id: true}
@@ -34,7 +34,7 @@ func (r *role) allow(id string) {
 	r.Unlock()
 }
 
-// 赋予当前角色访问 id 的权限。
+// 赋予当前角色访问 id 的权限
 func (r *role) deny(id string) {
 	if r.resources == nil {
 		r.resources = map[string]bool{id: false}

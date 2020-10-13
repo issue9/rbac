@@ -1,114 +1,135 @@
 // SPDX-License-Identifier: MIT
 
 // Package rbac 简单的 RBAC 权限规则实现
-//
-// 分为角色和资源两部分。
-// 角色可以设置其上一级，除了被明确禁止的，所有权限可以从上一级继承下来。
-// 资源直接从属于角色。
 package rbac
 
-import "sync"
+import (
+	"fmt"
+
+	"github.com/issue9/sliceutil"
+)
 
 // RBAC 权限管理类
 type RBAC struct {
-	locker sync.RWMutex
-	roles  map[string]*role
+	store     Store
+	roles     map[int]*role
+	users     map[string][]int // 键名为用户 ID，键值为与该用户关联的角色 ID。
+	maxRoleID int
 }
 
 // New 新建 RBAC
-func New() *RBAC {
-	return &RBAC{
-		roles: make(map[string]*role, 100),
+func New(s Store) (*RBAC, error) {
+	roles, err := s.LoadRoles()
+	if err != nil {
+		return nil, err
 	}
+
+	rbac := &RBAC{
+		store: s,
+		roles: make(map[int]*role, 100),
+		users: make(map[string][]int, 100),
+	}
+
+	for _, r := range roles {
+		if rbac.maxRoleID < r.ID {
+			rbac.maxRoleID = r.ID
+		}
+
+		rbac.roles[r.ID] = &role{
+			id:        r.ID,
+			count:     r.Count,
+			parent:    r.Parent,
+			excludes:  r.Excludes,
+			resources: r.Resources,
+			rbac:      rbac,
+		}
+	}
+
+	return rbac, nil
 }
 
-// SetRole 设置角色
-func (rbac *RBAC) SetRole(id string, parent string) {
-	r := rbac.getRole(id)
-
-	if parent != "" {
-		p := rbac.getRole(parent)
-		r.parent = p
-	}
-}
-
-// RoleResources 与该角色有直接访问权限的所有资源
-func (rbac *RBAC) RoleResources(id string) map[string]bool {
-	rbac.locker.RLock()
-	role, found := rbac.roles[id]
-	rbac.locker.RUnlock()
-
-	if !found {
+// Related 将 uid 与角色进行关联
+func (rbac *RBAC) Related(uid string, role ...int) error {
+	if len(role) == 0 {
 		return nil
 	}
 
-	return role.resources
-}
+	role = role[:sliceutil.Unique(role, func(i, j int) bool { return role[i] == role[j] })]
 
-// Allow 赋予 role 访问 resource 的权限
-//
-// 即使其父类已有权限，也会再次给 role 直接赋予访问 resource 的权限。
-// 若 role 已经拥有直接访问 resource 的权限，则不执行任何操作。
-func (rbac *RBAC) Allow(role, resource string) {
-	rbac.getRole(role).allow(resource)
-}
-
-// Deny 禁止当前用户对当前资源的访问权限
-//
-// 不同于 Revoke，被禁用之的，即使上游有权限访问，也会被拒绝
-func (rbac *RBAC) Deny(role, resource string) {
-	rbac.getRole(role).deny(resource)
-}
-
-// Revoke 取消 role 访问 resource 的权限限制
-//
-// 恢复成默认状态，其依然可以从父类继承相关的权限信息。
-func (rbac *RBAC) Revoke(role, resource string) {
-	rbac.getRole(role).revoke(resource)
-}
-
-// RevokeRole 取消某一角色的所有的权限
-//
-// 其依然可以从父类继承相关的权限信息。
-func (rbac *RBAC) RevokeRole(role string) {
-	rbac.getRole(role).resources = map[string]bool{}
-}
-
-// 获取指定 ID 的角色，若不存在，则生成一个数据。
-func (rbac *RBAC) getRole(id string) *role {
-	rbac.locker.Lock()
-	defer rbac.locker.Unlock()
-
-	r, found := rbac.roles[id]
-	if !found { // 未初始化该角色的相关信息
-		r = &role{
-			id: id,
+	// 提取未在当前用户的角色列表中的
+	if u := rbac.users[uid]; len(u) > 0 {
+		rs := make([]int, 0, len(role))
+		for _, item := range role {
+			if sliceutil.Count(u, func(i int) bool { return u[i] == item }) <= 0 {
+				rs = append(rs, item)
+			}
 		}
-		rbac.roles[id] = r
+		role = rs
 	}
 
-	return r
+	for _, r := range role {
+		if _, found := rbac.roles[r]; !found {
+			return fmt.Errorf("角色 %d 并不存在", r)
+		}
+	}
+
+	if err := rbac.store.Relate(uid, role...); err != nil {
+		return err
+	}
+
+	rbac.users[uid] = append(rbac.users[uid], role...)
+
+	return nil
 }
 
-// IsAllow 查询 role 是否拥有访问 resource 的权限
+// Unrelated 取消 uid 与 role 的关联
+func (rbac *RBAC) Unrelated(uid string, role ...int) error {
+	if len(role) == 0 {
+		return nil
+	}
+
+	role = role[:sliceutil.Unique(role, func(i, j int) bool { return role[i] == role[j] })]
+	for _, r := range role {
+		if _, found := rbac.roles[r]; !found {
+			return fmt.Errorf("角色 %d 并不存在", r)
+		}
+	}
+
+	if err := rbac.store.Unrelate(uid, role...); err != nil {
+		return err
+	}
+
+	roles := rbac.users[uid]
+	size := sliceutil.QuickDelete(roles, func(i int) bool {
+		for _, r := range role {
+			if r == roles[i] {
+				return true
+			}
+		}
+		return false
+	})
+	rbac.users[uid] = roles[:size]
+
+	return nil
+}
+
+// IsAllow 查询 uid 是否拥有访问 resource 的权限
 //
 // 当角色本身没有明确指出是否拥有该权限时，会尝试查找父类的权限系统。
-func (rbac *RBAC) IsAllow(role, resource string) bool {
-	rbac.locker.RLock()
-	r, found := rbac.roles[role]
-	rbac.locker.RUnlock()
-
+func (rbac *RBAC) IsAllow(uid string, resID string) (allowed bool, err error) {
+	roles, found := rbac.users[uid]
 	if !found {
-		return false
+		if roles, err = rbac.store.LoadRelate(uid); err != nil {
+			return false, err
+		}
+		rbac.users[uid] = roles
 	}
 
-	if allow, ok := r.resources[resource]; ok {
-		return allow
+	for _, rid := range roles {
+		role := rbac.roles[rid]
+		if sliceutil.Count(role.resources, func(i int) bool { return role.resources[i] == resID }) > 0 {
+			return true, nil
+		}
 	}
-
-	if r.parent != nil {
-		return rbac.IsAllow(r.parent.id, resource)
-	}
-
-	return false
+	return false, nil
 }
